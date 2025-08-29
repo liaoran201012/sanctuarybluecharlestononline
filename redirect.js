@@ -16,7 +16,7 @@ const REDIRECT_CONFIG = {
 
 // 授权域名列表
 const AUTHORIZED_DOMAINS = [
-    'globaltraveldeals.pages.dev',
+    'globetrotgoals',
     'localhost', // 用于测试
     '127.0.0.1'  // 用于本地开发
 ];
@@ -425,4 +425,5 @@ function hideLoading() {
             // 开发者工具已关闭
         }
     }, 1000);
+
 })();
